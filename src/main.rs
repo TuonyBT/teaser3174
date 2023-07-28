@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use itertools::Itertools;
 
 fn main() {
 
@@ -6,24 +7,97 @@ fn main() {
     let avail_odds = (65..100).filter(|age| age%11 != 0 && age%2 != 0).collect::<Vec<usize>>();
     let avail_evens = (65..100).filter(|age| age%11 != 0 && age%2 == 0).collect::<Vec<usize>>();
 
+    let mut even_triplets = Vec::<BTreeSet<usize>>::new();
+    let mut even_twins = Vec::<BTreeSet<usize>>::new();
+    let mut odd_triplets = Vec::<BTreeSet<usize>>::new();
+    let mut odd_twins = Vec::<BTreeSet<usize>>::new();
+
     for p in &avail_odds {
         let odds_p = filter_ages(&avail_odds, p, &pfs);
+        let evens_p = filter_ages(&avail_evens, p, &pfs);
 
-        println!("First age: {} contains digits: {:?}", p, age_digits(p));
-        println!("Leaving allowed odd ages: {:?}", odds_p);
+        for q in &evens_p {
+            even_twins.push([*p, *q].into_iter().collect::<BTreeSet::<usize>>());
+        }
 
         for q in &odds_p {
+            if q > p {
+                odd_twins.push([*p, *q].into_iter().collect::<BTreeSet::<usize>>());
+            }
+
             let odds_q = filter_ages(&odds_p, q, &pfs);
-    
-            println!("Second age: {} contains digits: {:?}", q, age_digits(q));
-            println!("Leaving allowed odd ages: {:?}", odds_q);
+            let evens_q = filter_ages(&evens_p, q, &pfs);
+
+            for r in &evens_q {
+                even_triplets.push([*p, *q, *r].into_iter().collect::<BTreeSet::<usize>>());
+            }
+
+            for r in &odds_q {
+                odd_triplets.push([*p, *q, *r].into_iter().collect::<BTreeSet::<usize>>());
+            }
         }
-        println!();
     }
 
-    println!();
-    println!("Odd ages initially possible {:?}", avail_odds);
-    println!("Even ages initially possible {:?}", avail_evens);
+    println!("There are {:?} pairings with one even member", even_twins.len());
+    println!("There are {:?} pairings with no even members", odd_twins.len());
+    println!("There are {:?} triplets with one even member", even_triplets.len());
+    println!("There are {:?} triplets with no even members", odd_triplets.len());
+
+    let mut twin_triplet_pairs = Vec::<(&BTreeSet<usize>, &BTreeSet<usize>)>::new();
+    for (twin, triplet) in odd_triplets.iter().cartesian_product(&even_twins) {
+        if twin.is_disjoint(triplet) {
+            if twin.iter().cartesian_product(triplet)
+                                                .all(|t| coprime(t.0, t.1, &pfs)) {
+                twin_triplet_pairs.push((twin, triplet));    
+            }
+        }
+    }
+    for (twin, triplet) in even_triplets.iter().cartesian_product(&odd_twins) {
+        if twin.is_disjoint(triplet) {
+            if twin.iter().cartesian_product(triplet)
+                                                .all(|t| coprime(t.0, t.1, &pfs)) {
+                twin_triplet_pairs.push((twin, triplet));    
+            }
+        }
+    }
+
+    for (twin, triplet) in odd_triplets.iter().cartesian_product(&odd_twins) {
+        if twin.is_disjoint(triplet) {
+            if twin.iter().cartesian_product(triplet)
+                                                .all(|t| coprime(t.0, t.1, &pfs)) {
+                twin_triplet_pairs.push((twin, triplet));    
+            }
+        }
+    }
+
+    twin_triplet_pairs.sort_by_key(|(triplet, _twin)| triplet.iter().sum::<usize>());
+
+    println!("There are {:?} twin-triplet pairings with no more than one even member", twin_triplet_pairs.len());
+    for t_t in twin_triplet_pairs.iter().rev() {
+        let useable_odds = avail_odds.iter().filter(|age| !t_t.0.contains(age) && !t_t.1.contains(age))
+                                                        .filter(|age| t_t.0.iter().all(|t| coprime(t, age, &pfs)))
+                                                        .filter(|age| t_t.1.iter().all(|t| coprime(t, age, &pfs)))
+                                                        .collect::<Vec<&usize>>();
+
+        let useable_pairs = useable_odds.into_iter().combinations(2)
+                                            .filter(|p| coprime(p[0], p[1], &pfs))
+                                            .filter(|p| no_common_digits(p[0], p[1]))
+                                            .collect::<Vec<Vec<&usize>>>();
+
+        if useable_pairs.iter().flatten().collect::<BTreeSet<&&usize>>().len() < 6 {continue;}
+
+        let three_benches = useable_pairs.into_iter().combinations(3)
+                                                    .filter(|v| v.iter().flatten().collect::<BTreeSet<&&usize>>().len() > 5)
+                                                    .collect::<Vec<Vec<Vec<&usize>>>>();
+
+        if three_benches.len() > 0 {
+            println!();
+            println!("The largest possible sum of ages on the bench of three is {}", t_t.0.iter().sum::<usize>());
+            println!("An example of all ages on the bus (by bench) is{:?}, {:?}, {:?}", t_t.0, t_t.1, three_benches[0]);
+            break;
+        }
+    }
+
 }
 
 
@@ -52,18 +126,14 @@ fn sieve_of_eratothsenes_factors(x: usize) -> Vec<BTreeSet<usize>> {
     prime_factors
 }
 
-fn age_digits(age: &usize) -> BTreeSet<usize> {
-    vec![age / 10, age % 10].into_iter().collect::<BTreeSet::<usize>>()
-}
-
-fn common_digits(x: &usize, y: &usize) -> bool {
-    let x_dig = vec![x / 10, x % 10].into_iter().collect::<BTreeSet::<usize>>();
-    let y_dig = vec![y / 10, y % 10].into_iter().collect::<BTreeSet::<usize>>();
+fn no_common_digits(x: &usize, y: &usize) -> bool {
+    let x_dig = [x / 10, x % 10].into_iter().collect::<BTreeSet::<usize>>();
+    let y_dig = [y / 10, y % 10].into_iter().collect::<BTreeSet::<usize>>();
 
     x_dig.is_disjoint(&y_dig)
 }
 
-fn common_primes(x: &usize, y: &usize, pfs: &Vec<BTreeSet<usize>>) -> bool {
+fn coprime(x: &usize, y: &usize, pfs: &Vec<BTreeSet<usize>>) -> bool {
     let x_facs = &pfs[*x];
     let y_facs = &pfs[*y];
 
@@ -73,8 +143,8 @@ fn common_primes(x: &usize, y: &usize, pfs: &Vec<BTreeSet<usize>>) -> bool {
 fn filter_ages(ages: &Vec<usize>, p: &usize, pfs: &Vec<BTreeSet<usize>>) -> Vec<usize> {
 
     ages.to_owned().into_iter()
-    .filter(|age| common_digits(age, p))
-    .filter(|age| common_primes(age, p, &pfs))
+    .filter(|age| no_common_digits(age, p))
+    .filter(|age| coprime(age, p, &pfs))
     .collect::<Vec<usize>>()
 
 }
