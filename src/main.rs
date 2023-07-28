@@ -3,15 +3,22 @@ use itertools::Itertools;
 
 fn main() {
 
+//  Set out the prime factors of each age, as a means to testing for coprimes
     let pfs = sieve_of_eratothsenes_factors(99).into_iter().collect::<Vec<BTreeSet<usize>>>();
+
+//  Each set of eleven can only contain up to one even age, so we can save a bit of trial and error by dividing the ages into odds and evens
     let avail_odds = (65..100).filter(|age| age%11 != 0 && age%2 != 0).collect::<Vec<usize>>();
     let avail_evens = (65..100).filter(|age| age%11 != 0 && age%2 == 0).collect::<Vec<usize>>();
 
+//  Start by calculating all possible sets of three ages, with and without an even member
     let mut even_triplets = Vec::<BTreeSet<usize>>::new();
-    let mut even_twins = Vec::<BTreeSet<usize>>::new();
     let mut odd_triplets = Vec::<BTreeSet<usize>>::new();
+
+//  Complement each of these with one set of two ages, avoiding pairings with more than one even age
+    let mut even_twins = Vec::<BTreeSet<usize>>::new();
     let mut odd_twins = Vec::<BTreeSet<usize>>::new();
 
+//  This loop builds the pairs and triplets, removing potential clashes as we build
     for p in &avail_odds {
         let odds_p = filter_ages(&avail_odds, p, &pfs);
         let evens_p = filter_ages(&avail_evens, p, &pfs);
@@ -43,7 +50,10 @@ fn main() {
     println!("There are {:?} triplets with one even member", even_triplets.len());
     println!("There are {:?} triplets with no even members", odd_triplets.len());
 
+//  Build allowed pairings of one bench of three with one bench of two
     let mut twin_triplet_pairs = Vec::<(&BTreeSet<usize>, &BTreeSet<usize>)>::new();
+
+//  Triplets with no even age can be combined with pairs that have an even age...
     for (twin, triplet) in odd_triplets.iter().cartesian_product(&even_twins) {
         if twin.is_disjoint(triplet) {
             if twin.iter().cartesian_product(triplet)
@@ -52,15 +62,8 @@ fn main() {
             }
         }
     }
-    for (twin, triplet) in even_triplets.iter().cartesian_product(&odd_twins) {
-        if twin.is_disjoint(triplet) {
-            if twin.iter().cartesian_product(triplet)
-                                                .all(|t| coprime(t.0, t.1, &pfs)) {
-                twin_triplet_pairs.push((twin, triplet));    
-            }
-        }
-    }
 
+//  ... or with pairs that only have odd ages...
     for (twin, triplet) in odd_triplets.iter().cartesian_product(&odd_twins) {
         if twin.is_disjoint(triplet) {
             if twin.iter().cartesian_product(triplet)
@@ -70,9 +73,22 @@ fn main() {
         }
     }
 
+//  ... but triplets with an even age can only be combined with pairs of odd ages
+    for (twin, triplet) in even_triplets.iter().cartesian_product(&odd_twins) {
+        if twin.is_disjoint(triplet) {
+            if twin.iter().cartesian_product(triplet)
+                                                .all(|t| coprime(t.0, t.1, &pfs)) {
+                twin_triplet_pairs.push((twin, triplet));    
+            }
+        }
+    }
+
+//  To find the highest possible value of age sum that matches the puzzle requirements, start with the largest
+//  possible sum and search downwards until requirements are met
     twin_triplet_pairs.sort_by_key(|(triplet, _twin)| triplet.iter().sum::<usize>());
 
     println!("There are {:?} twin-triplet pairings with no more than one even member", twin_triplet_pairs.len());
+
     for t_t in twin_triplet_pairs.iter().rev() {
         let useable_odds = avail_odds.iter().filter(|age| !t_t.0.contains(age) && !t_t.1.contains(age))
                                                         .filter(|age| t_t.0.iter().all(|t| coprime(t, age, &pfs)))
@@ -126,6 +142,7 @@ fn sieve_of_eratothsenes_factors(x: usize) -> Vec<BTreeSet<usize>> {
     prime_factors
 }
 
+//  None of the ages on any given bench can share a digit
 fn no_common_digits(x: &usize, y: &usize) -> bool {
     let x_dig = [x / 10, x % 10].into_iter().collect::<BTreeSet::<usize>>();
     let y_dig = [y / 10, y % 10].into_iter().collect::<BTreeSet::<usize>>();
@@ -133,6 +150,7 @@ fn no_common_digits(x: &usize, y: &usize) -> bool {
     x_dig.is_disjoint(&y_dig)
 }
 
+//  None of the ages on any given bench share a prime factor
 fn coprime(x: &usize, y: &usize, pfs: &Vec<BTreeSet<usize>>) -> bool {
     let x_facs = &pfs[*x];
     let y_facs = &pfs[*y];
@@ -140,6 +158,8 @@ fn coprime(x: &usize, y: &usize, pfs: &Vec<BTreeSet<usize>>) -> bool {
     x_facs.is_disjoint(&y_facs)
 }
 
+//  Filter any given set of ages to avoid clashes with a subset we have already built,
+//  according to the rules for ages on any given bench
 fn filter_ages(ages: &Vec<usize>, p: &usize, pfs: &Vec<BTreeSet<usize>>) -> Vec<usize> {
 
     ages.to_owned().into_iter()
