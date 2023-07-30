@@ -89,7 +89,13 @@ fn main() {
 
     println!("There are {:?} twin-triplet pairings with no more than one even member", twin_triplet_pairs.len());
 
+    let mut age_sum = 0_usize;
+
     for t_t in twin_triplet_pairs.iter().rev() {
+
+        if age_sum > t_t.0.iter().sum::<usize>() {break}
+        age_sum = t_t.0.iter().sum::<usize>();
+
         let useable_odds = avail_odds.iter().filter(|age| !t_t.0.contains(age) && !t_t.1.contains(age))
                                                         .filter(|age| t_t.0.iter().all(|t| coprime(t, age, &pfs)))
                                                         .filter(|age| t_t.1.iter().all(|t| coprime(t, age, &pfs)))
@@ -106,11 +112,12 @@ fn main() {
                                                     .filter(|v| v.iter().flatten().collect::<BTreeSet<&&usize>>().len() > 5)
                                                     .collect::<Vec<Vec<Vec<&usize>>>>();
 
+
         if three_benches.len() > 0 {
             println!();
-            println!("The largest possible sum of ages on the bench of three is {}", t_t.0.iter().sum::<usize>());
-            println!("An example of all ages on the bus (by bench) is{:?}, {:?}, {:?}", t_t.0, t_t.1, three_benches[0]);
-            break;
+            println!("The largest possible sum of ages on the bench of three is {}", age_sum);
+            println!("The eldest age on that bench is {:?}", t_t.0.iter().last().unwrap());
+//            break;
         }
     }
 
